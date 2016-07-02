@@ -31,6 +31,7 @@ sub do_lock ($);
 sub lock_bsd ($);
 sub lock_other ($);
 sub handle_error ($);
+sub timeout ($$);
 
 sub usage (;$) {
     my $msg = shift;
@@ -70,13 +71,10 @@ my $cmd = shift
 
 my $lock_fh;
 if (defined $timeout && $timeout > 0) {
-    require Time::HiRes; Time::HiRes->VERSION(1.9721); # https://rt.cpan.org/Public/Bug/Display.html?id=84141, https://rt.cpan.org/Public/Bug/Display.html?id=100886
-    require Time::Out;
     my $exit;
-    Time::Out::timeout
-        ($timeout => sub {
-	     ($lock_fh, $exit) = do_lock 1;
-	 });
+    timeout($timeout, sub {
+		($lock_fh, $exit) = do_lock 1;
+	    });
     if (!$lock_fh) {
 	$exit = EX_TEMPFAIL if !defined $exit; # unset if timeout fired
 	handle_error $exit;
@@ -164,6 +162,29 @@ sub handle_error ($) {
     exit $exit;
 }
 
+# Simplified version of Time::Out::timeout:
+# - no nested timeouts possible
+# - no return/context handling
+# - no special exception handling necessary
+# Works also on MSWin32 (unlike Time::Out 0.11 --- https://rt.cpan.org/Ticket/Display.html?id=115811)
+sub timeout ($$) {
+    my($secs, $code) = @_;
+    my $alarm;
+    if (Time::HiRes->can('alarm')) {
+	$alarm = \&Time::HiRes::alarm;
+    } else {
+	if ($secs < 1) { $secs = 1 }
+	$alarm = sub { alarm(@_) };
+    }
+    local $SIG{ALRM} = sub { die $code };
+    eval {
+	$alarm->($secs);
+	$code->();
+	$alarm->(0);
+    };
+    $alarm->(0);
+}
+
 __END__
 
 =head1 NAME
@@ -215,9 +236,8 @@ will fail unless it can acquire the lock immediately. When a lock
 times out, I<command> is not executed.
 
 Unlike the original L<lockf> utility, L<plockf> may handle also
-floating point timeouts.
-
-Timeout handling is implemented with the CPAN module L<Time::Out>.
+floating point timeouts on systems which implemented
+C<Time::HiRes::alarm> (currently this is not the case on Windows).
 
 =back
 

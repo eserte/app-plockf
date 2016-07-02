@@ -18,8 +18,6 @@ WriteMakefile(
     NAME              => 'App::plockf',
     VERSION_FROM      => 'bin/plockf',
     PREREQ_PM         => {
-	'Time::Out'   => 0, # only needed for -t
-	'Time::HiRes' => 1.9721, # RT 84141
     },
     EXE_FILES         => ['bin/plockf'],
     LICENSE	      => 'perl',
