@@ -106,9 +106,11 @@ END {
 
 sub do_lock ($) {
     my($block) = @_;
-    if (defined &Fcntl::O_EXLOCK && defined &Fcntl::O_NONBLOCK) {
+    if      (   ($] <  5.010 && eval { &Fcntl::O_EXLOCK } && eval { &Fcntl::O_NONBLOCK })
+	     || ($] >= 5.010 && defined &Fcntl::O_EXLOCK && defined &Fcntl::O_NONBLOCK)) {
 	return lock_bsd $block;
-    } elsif (defined &Fcntl::LOCK_EX && defined &Fcntl::LOCK_NB) {
+    } elsif (   ($] <  5.010 && eval { &Fcntl::LOCK_EX } && eval { &Fcntl::LOCK_NB })
+	     || ($] >= 5.010 && defined &Fcntl::LOCK_EX && defined &Fcntl::LOCK_NB)) {
 	return lock_other $block;
     } else {
 	die "Can't lock on this operating system";
