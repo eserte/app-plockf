@@ -86,7 +86,13 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 {
     my @cmd = (@full_script, $lock_file, $^X, '-e', 'kill 9 => $$');
     my($ret) = run(\@cmd);
-    is $ret, 70, 'command was killed, EX_SOFTWARE returned';
+    if ($^O eq 'MSWin32') {
+	# signals are not reported in $? on Windows, so we
+	# only know that it failed
+	isnt $ret, 0, 'command was not successful, special Windows check';
+    } else {
+	is $ret, 70, 'command was killed, EX_SOFTWARE returned';
+    }
 }
 
 {

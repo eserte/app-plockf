@@ -275,6 +275,8 @@ There was an error on the B<plockf> command line.
 The I<command> did not exit normally, but may have been signaled or
 stopped.
 
+C<EX_SOFTWARE> is not reported on Windows system.s
+
 =item C<EX_OSERR> won't be returned in the perl port.
 
 =back
