@@ -1,0 +1,270 @@
+#!/usr/bin/perl -w
+# -*- perl -*-
+
+#
+# Author: Slaven Rezic
+#
+# Copyright (C) 2016 Slaven Rezic. All rights reserved.
+# This program is free software; you can redistribute it and/or
+# modify it under the same terms as Perl itself.
+#
+# Mail: slaven@rezic.de
+# WWW:  http://www.rezic.de/eserte/
+#
+
+use strict;
+use Errno;
+use Fcntl ();
+use Getopt::Long;
+
+use vars qw($VERSION);
+$VERSION = "0.01";
+
+# sysexits(3) constants
+use constant EX_USAGE       => 64;
+use constant EX_UNAVAILABLE => 69;
+use constant EX_SOFTWARE    => 70;
+use constant EX_CANTCREAT   => 73;
+use constant EX_TEMPFAIL    => 75;
+
+sub do_lock ($);
+sub lock_bsd ($);
+sub lock_other ($);
+sub handle_error ($);
+
+sub usage (;$) {
+    my $msg = shift;
+    if ($msg) {
+	warn $msg, "\n";
+    }
+    warn "usage: $0 [-kns] [-t seconds] file command [arguments]\n";
+    exit EX_USAGE;
+}
+
+my $timeout;
+my $keep;
+my $silent;
+my $nocreat;
+
+Getopt::Long::Configure('require_order');
+GetOptions(
+	   'help|h|?' => sub { usage },
+	   'k'        => \$keep,
+	   'n'        => \$nocreat,
+	   's'        => \$silent,
+	   't=f'      => \$timeout,
+	   'v|version'            => sub {
+	       print "plockf version $VERSION\n";
+	       exit 0;
+	   },
+	  );
+
+if (defined $timeout && $timeout < 0) {
+    usage "Timeout must be positive";
+}
+
+my $lock_file = shift
+    or usage "Lock file is not specified";
+my $cmd = shift
+    or usage "Command is not specified";
+
+my $lock_fh;
+if (defined $timeout && $timeout > 0) {
+    require Time::HiRes; Time::HiRes->VERSION(1.9721); # https://rt.cpan.org/Public/Bug/Display.html?id=84141, https://rt.cpan.org/Public/Bug/Display.html?id=100886
+    require Time::Out;
+    my $exit;
+    Time::Out::timeout
+        ($timeout => sub {
+	     ($lock_fh, $exit) = do_lock 1;
+	 });
+    if (!$lock_fh) {
+	$exit = EX_TEMPFAIL if !defined $exit; # unset if timeout fired
+	handle_error $exit;
+    }
+} else {
+    my $exit;
+    ($lock_fh, $exit) = do_lock(defined $timeout ? 0 : 1);
+    if (!$lock_fh) {
+	handle_error $exit;
+    }
+}
+
+# XXX signal handling?
+system { $cmd } $cmd, @ARGV;
+if ($? & 127) {
+    exit EX_SOFTWARE;
+} else {
+    my $exit_code = $? >> 8;
+    exit $exit_code;
+}
+
+END {
+    if (!$keep && defined $lock_file) {
+	unlink $lock_file;
+    }
+}
+
+sub do_lock ($) {
+    my($block) = @_;
+    if (defined &Fcntl::O_EXLOCK && defined &Fcntl::O_NONBLOCK) {
+	return lock_bsd $block;
+    } elsif (defined &Fcntl::LOCK_EX && defined &Fcntl::LOCK_NB) {
+	return lock_other $block;
+    } else {
+	die "Can't lock on this operating system";
+    }
+}
+
+sub lock_bsd ($) {
+    my($block) = @_;
+    my $lock_fh;
+    if (!sysopen $lock_fh, $lock_file, ($block ? 0 : &Fcntl::O_NONBLOCK)|&Fcntl::O_EXLOCK|($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
+	undef $lock_fh;
+    }
+    if (!$lock_fh) {
+	if ($!{EWOULDBLOCK}) {
+	    return (undef, EX_TEMPFAIL);
+	} elsif ($nocreat && $!{ENOENT}) {
+	    return (undef, EX_UNAVAILABLE);
+	} else {
+	    return (undef, EX_CANTCREAT);
+	}
+    } else {
+	return ($lock_fh, $!);
+    }
+}
+
+sub lock_other ($) {
+    my($block) = @_;
+    my $lock_fh;
+    if (!sysopen $lock_fh, $lock_file, ($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
+	if ($nocreat && $!{ENOENT}) {
+	    return (undef, EX_UNAVAILABLE);
+	} else {
+	    return (undef, EX_CANTCREAT);
+	}
+    }
+    if (!flock $lock_fh, ($block ? 0 : &Fcntl::LOCK_NB)|&Fcntl::LOCK_EX) {
+	return (undef, EX_TEMPFAIL);
+    }
+    return ($lock_fh, $!);
+}
+
+sub handle_error ($) {
+    my $exit = shift;
+    unless ($silent) {
+	if ($exit == EX_UNAVAILABLE) {
+	    warn "$0: cannot open $lock_file: $!\n";
+	} else {
+	    warn "$0: $lock_file: already locked\n";
+	}
+    }
+    exit $exit;
+}
+
+__END__
+
+=head1 NAME
+
+plockf - execute a command while holding a file lock
+
+=head1 SYNOPSIS
+
+    plockf [-kns] [-t seconds] file command [arguments]
+
+=head1 DESCRIPTION
+
+B<plockf> is a perl port of the FreeBSD utility L<lockf(1)>.
+
+The B<plockf> utility acquires an exclusive lock on a I<file>, creating
+it if necessary, and removing the file on exit unless explicitly told
+not to. While holding the lock, it executes a I<command> with optional
+I<arguments>. After the I<command> completes, B<plockf> releases the
+lock, and removes the I<file> unless the C<-k> option is specified.
+BSD-style locking is used, as described in L<flock(2)>; the mere
+existence of the I<file> is not considered to constitute a lock.
+
+The following options are supported:
+
+=over
+
+=item C<-k>
+
+Causes the lock I<file> to be kept (not removed) after the command
+completes.
+
+=item C<-s>
+
+Causes B<plockf> to operate silently. Failure to acquire the lock is
+indicated only in the exit status.
+
+=item C<-n>
+
+Causes B<plockf> to fail if the specified lock I<file> does not exist.
+If C<-n> is not specified, B<plockf> will create I<file> if necessary.
+
+=item C<-t I<seconds>>
+
+Specifies a timeout for waiting for the lock. By default, B<plockf>
+waits indefinitely to acquire the lock. If a timeout is specified with
+this option, B<plockf> will wait at most the given number of I<seconds>
+before giving up. A timeout of 0 may be given, in which case B<plockf>
+will fail unless it can acquire the lock immediately. When a lock
+times out, I<command> is not executed.
+
+Unlike the original L<lockf> utility, L<plockf> may handle also
+floating point timeouts.
+
+Timeout handling is implemented with the CPAN module L<Time::Out>.
+
+=back
+
+In no event will B<plockf> break a lock that is held by another
+process.
+
+=head1 EXIT STATUS
+
+If B<plockf> successfully acquires the lock, it returns the exit status
+produced by I<command>. Otherwise, it returns one of the exit
+codes defined in L<sysexits(3)>, as follows:
+
+=over
+
+=item C<EX_TEMPFAIL> (75)
+
+The specified lock I<file> was already locked by another process.
+
+=item C<EX_CANTCREAT> (73)
+
+The B<plockf> utility was unable to create the lock I<file>, e.g.,
+because of insufficient access privileges.
+
+=item C<EX_UNAVAILABLE> (69)
+
+The C<-n> option is specified and the specified lock I<file> does not
+exist.
+
+=item C<EX_USAGE> (64)
+
+There was an error on the B<plockf> command line.
+
+=item C<EX_SOFTWARE> (70)
+
+The I<command> did not exit normally, but may have been signaled or
+stopped.
+
+=item C<EX_OSERR> won't be returned in the perl port.
+
+=back
+
+=head1 SEE ALSO
+
+L<flock(1)>, L<flock(2)>, L<sysexits(3)>, L<Fcntl>.
+
+=head1 AUTHORS
+
+Author of the perl port: Slaven Rezic <srezic@cpan.org>
+
+Author of the original FreeBSD utility: John Polstra <jdp@polstra.com>
+
+=cut

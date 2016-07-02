@@ -1,0 +1,20 @@
+branches:
+ except:
+  - /appveyor/
+language: perl
+matrix:
+ include:
+  - perl: "5.22"
+    env: WITH_IPC_RUN=1
+  - perl: "5.20"
+  - perl: "5.18"
+    env: WITH_IPC_RUN=1
+  - perl: "5.16"
+  - perl: "5.14"
+  - perl: "5.12"
+  - perl: "5.10"
+  - perl: "5.8"
+    env: WITH_IPC_RUN=1
+before_install:
+ - '[ "$WITH_IPC_RUN" = 1 ] && cpanm --quiet --notest IPC::Run || true'
+sudo: false
