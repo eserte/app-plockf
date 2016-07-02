@@ -155,7 +155,7 @@ sub run_blocking_process {
     my $pid = fork;
     die $! if !defined $pid;
     if ($pid == 0) {
-	my @cmd = (@full_script, $lock_file, $^X, '-e', qq{open my \$fh, ">", shift; sleep $seconds}, $signal_file);
+	my @cmd = (@full_script, $lock_file, $^X, '-e', qq{open my \$fh, q{>}, shift; sleep $seconds}, $signal_file);
 	exec @cmd;
 	die "@cmd failed: $!";
     }

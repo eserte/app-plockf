@@ -72,9 +72,24 @@ my $cmd = shift
 my $lock_fh;
 if (defined $timeout && $timeout > 0) {
     my $exit;
-    timeout($timeout, sub {
-		($lock_fh, $exit) = do_lock 1;
-	    });
+    if ($^O eq 'MSWin32') {
+	# alarm() cannot be interrupted, so we just loop and sleep
+	my $t0 = time;
+	while () {
+	    ($lock_fh, $exit) = do_lock 0; # cannot block here
+	    last if $lock_fh;
+	    last if $exit != EX_TEMPFAIL;
+	    if (time - $t0 > $timeout) {
+		$exit = undef; # will be set later to EX_TEMPFAIL;
+		last;
+	    }
+	    sleep 1;
+	}
+    } else {
+	timeout($timeout, sub {
+		    ($lock_fh, $exit) = do_lock 1;
+		});
+    }
     if (!$lock_fh) {
 	$exit = EX_TEMPFAIL if !defined $exit; # unset if timeout fired
 	handle_error $exit;
@@ -166,11 +181,10 @@ sub handle_error ($) {
 # - no nested timeouts possible
 # - no return/context handling
 # - no special exception handling necessary
-# Works also on MSWin32 (unlike Time::Out 0.11 --- https://rt.cpan.org/Ticket/Display.html?id=115811)
 sub timeout ($$) {
     my($secs, $code) = @_;
     my $alarm;
-    if (Time::HiRes->can('alarm')) {
+    if (eval { Time::HiRes->import('alarm') }) {
 	$alarm = \&Time::HiRes::alarm;
     } else {
 	if ($secs < 1) { $secs = 1 }
@@ -236,8 +250,9 @@ will fail unless it can acquire the lock immediately. When a lock
 times out, I<command> is not executed.
 
 Unlike the original L<lockf> utility, L<plockf> may handle also
-floating point timeouts on systems which implemented
-C<Time::HiRes::alarm> (currently this is not the case on Windows).
+floating point timeouts on systems which implement
+C<Time::HiRes::alarm>; on Windows systems only integer timeouts are
+supported.
 
 =back
 
