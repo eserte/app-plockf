@@ -93,6 +93,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     } else {
 	is $ret, 70, 'command was killed, EX_SOFTWARE returned';
     }
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
@@ -101,8 +102,11 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 75, 'lock error on -t 0';
     defined $stderr and like $stderr, qr{^plockf: .*plockf.lck: already locked$};
-    kill 9 => $pid;
+    if ($^O ne 'MSWin32') { # SIGTERM is problematic on Windows: http://stackoverflow.com/a/33216565/2332415
+	kill TERM => $pid;
+    }
     waitpid $pid, 0;
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
@@ -111,8 +115,11 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 75, 'silent lock error on -t 0';
     defined $stderr and is $stderr, '';
-    kill 9 => $pid;
+    if ($^O ne 'MSWin32') {
+	kill TERM => $pid;
+    }
     waitpid $pid, 0;
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
@@ -121,8 +128,11 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 75, 'lock error on -t > 0s';
     defined $stderr and like $stderr, qr{^plockf: .*plockf.lck: already locked$};
-    kill 9 => $pid;
+    if ($^O ne 'MSWin32') {
+	kill TERM => $pid;
+    }
     waitpid $pid, 0;
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
@@ -131,6 +141,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 0, 'got lock within timeout interval';
     defined $stderr and is $stderr, '';
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
@@ -139,6 +150,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 0, 'no lock error, blocking lock';
     defined $stderr and is $stderr, '';
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
@@ -147,6 +159,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 69, 'error on -n option';
     defined $stderr and like $stderr, qr{^plockf: cannot open .*plockf.lck:};
+    ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 sub run_blocking_process {
