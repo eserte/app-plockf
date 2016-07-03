@@ -15,6 +15,9 @@ matrix:
   - perl: "5.10"
   - perl: "5.8"
     env: WITH_IPC_RUN=1
+  - perl: "5.8"
+    env: WITH_IPC_RUN=1 USE_TIME_HIRES_VERSION=1.9716
 before_install:
- - '[ "$WITH_IPC_RUN" = 1 ] && cpanm --quiet --notest IPC::Run || true'
+ - '[ "$WITH_IPC_RUN" = 1 ]             && cpanm --quiet --notest IPC::Run                                || true'
+ - '[ "$USE_TIME_HIRES_VERSION" != "" ] && cpanm --quiet --notest Time::HiRes~"==$USE_TIME_HIRES_VERSION" || true'
 sudo: false
