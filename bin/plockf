@@ -349,7 +349,7 @@ A system call (e.g., fork(2)) failed unexpectedly.
 The I<command> did not exit normally, but may have been signaled or
 stopped.
 
-C<EX_SOFTWARE> is not reported on Windows system.s
+C<EX_SOFTWARE> is not reported on Windows systems.
 
 =back
 
