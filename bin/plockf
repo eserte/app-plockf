@@ -18,7 +18,7 @@ use Fcntl ();
 use Getopt::Long;
 
 use vars qw($VERSION);
-$VERSION = "0.01";
+$VERSION = "0.02";
 
 # sysexits(3) constants
 use constant EX_USAGE       => 64;
@@ -28,11 +28,8 @@ use constant EX_OSERR       => 71;
 use constant EX_CANTCREAT   => 73;
 use constant EX_TEMPFAIL    => 75;
 
-sub do_lock ($);
-sub lock_bsd ($);
-sub lock_other ($);
+sub set_impl ();
 sub handle_error ($);
-sub timeout ($$);
 sub progname ();
 
 sub usage (;$) {
@@ -71,40 +68,45 @@ my $lock_file = shift
 my $cmd = shift
     or usage "Command is not specified";
 
-my $lock_fh;
+set_impl;
+
+my $timed_out;
+my $alarm;
 if (defined $timeout && $timeout > 0) {
-    my $exit;
-    if ($^O eq 'MSWin32') {
-	# alarm() cannot be interrupted, so we just loop and sleep
-	my $t0 = time;
-	while () {
-	    ($lock_fh, $exit) = do_lock 0; # cannot block here
-	    last if $lock_fh;
-	    last if $exit != EX_TEMPFAIL;
-	    if (time - $t0 > $timeout) {
-		$exit = undef; # will be set later to EX_TEMPFAIL;
-		last;
-	    }
-	    sleep 1;
-	}
+    $SIG{ALRM} = sub { $timed_out = 1 };
+    if (eval { Time::HiRes->import('alarm') }) {
+	$alarm = \&Time::HiRes::alarm;
     } else {
-	timeout($timeout, sub {
-		    ($lock_fh, $exit) = do_lock 1;
-		});
+	if ($timeout < 1) { $timeout = 1 }
+	$alarm = sub { alarm(@_) };
     }
-    if (!$lock_fh) {
-	$exit = EX_TEMPFAIL if !defined $exit; # unset if timeout fired
-	handle_error $exit;
-    }
-} else {
-    my $exit;
-    ($lock_fh, $exit) = do_lock(defined $timeout ? 0 : 1);
-    if (!$lock_fh) {
-	handle_error $exit;
+    $alarm->($timeout);
+}
+
+my $lock_fh = acquire_lock(0);
+while (!$lock_fh && !$timed_out && (!defined $timeout || $timeout > 0)) {
+    if ($^O eq 'MSWin32') {
+	# systems where alarm() does not work with blocking syscalls
+	wait_for_lock_nonblocking();
+	$lock_fh = acquire_lock(0);
+    } elsif ($keep) {
+	$lock_fh = acquire_lock(1);
+    } else {
+	wait_for_lock();
+	$lock_fh = acquire_lock(0);
     }
 }
 
-# XXX signal handling?
+if ($alarm) {
+    $alarm->(0);
+}
+
+if (!$lock_fh) {
+    handle_error EX_TEMPFAIL;
+}
+
+$SIG{TERM} = sub { exit }; # would run END block
+
 system { $cmd } $cmd, @ARGV;
 if ($? == -1) {
     warn progname . ": calling '$cmd @ARGV' failed: $!\n";
@@ -122,52 +124,87 @@ END {
     }
 }
 
-sub do_lock ($) {
+sub set_impl () {
     my($block) = @_;
     if      (   ($] <  5.010 && eval { &Fcntl::O_EXLOCK } && eval { &Fcntl::O_NONBLOCK })
 	     || ($] >= 5.010 && defined &Fcntl::O_EXLOCK && defined &Fcntl::O_NONBLOCK)) {
-	return lock_bsd $block;
+	*acquire_lock  = \&acquire_lock_bsd;
+	*wait_for_lock = \&wait_for_lock_bsd;
     } elsif (   ($] <  5.010 && eval { &Fcntl::LOCK_EX } && eval { &Fcntl::LOCK_NB })
 	     || ($] >= 5.010 && defined &Fcntl::LOCK_EX && defined &Fcntl::LOCK_NB)) {
-	return lock_other $block;
+	*acquire_lock  = \&acquire_lock_other;
+	*wait_for_lock = \&wait_for_lock_other;
     } else {
 	die "Can't lock on this operating system";
     }
 }
 
-sub lock_bsd ($) {
+sub acquire_lock_bsd {
     my($block) = @_;
     my $lock_fh;
     if (!sysopen $lock_fh, $lock_file, ($block ? 0 : &Fcntl::O_NONBLOCK)|&Fcntl::O_EXLOCK|($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
-	undef $lock_fh;
-    }
-    if (!$lock_fh) {
-	if ($!{EWOULDBLOCK}) {
-	    return (undef, EX_TEMPFAIL);
-	} elsif ($nocreat && $!{ENOENT}) {
-	    return (undef, EX_UNAVAILABLE);
-	} else {
-	    return (undef, EX_CANTCREAT);
+	if ($!{EAGAIN} || $!{EINTR}) {
+	    return undef;
 	}
-    } else {
-	return ($lock_fh, $!);
+	if ($nocreat && $!{ENOENT}) {
+	    handle_error EX_UNAVAILABLE;
+	} else {
+	    handle_error EX_CANTCREAT;
+	}
     }
+    return $lock_fh;
 }
 
-sub lock_other ($) {
+sub wait_for_lock_bsd {
+    sysopen my $fh, $lock_file, &Fcntl::O_EXLOCK;
+    # no error handling needed; probably same failure will happen in acquire_lock_bsd
+}
+
+sub acquire_lock_other {
     my($block) = @_;
     my $lock_fh;
     if (!sysopen $lock_fh, $lock_file, ($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
+	if ($!{EAGAIN} || $!{EINTR}) {
+	    return undef;
+	}
 	if ($nocreat && $!{ENOENT}) {
-	    return (undef, EX_UNAVAILABLE);
+	    handle_error EX_UNAVAILABLE;
 	} else {
-	    return (undef, EX_CANTCREAT);
+	    handle_error EX_CANTCREAT;
 	}
     }
     if (!flock $lock_fh, ($block ? 0 : &Fcntl::LOCK_NB)|&Fcntl::LOCK_EX) {
-	return (undef, EX_TEMPFAIL);
+	return undef;
     }
-    return ($lock_fh, $!);
+    my @stat_file = stat $lock_file;
+    if (!@stat_file) {
+	# file was unlinked in the meantime
+	return undef;
+    }
+    if ($^O ne 'MSWin32') { # ino+dev are not meaningful on Windows systems
+	my @stat_fh = stat $lock_fh;
+	if ($stat_fh[1] != $stat_file[1] || $stat_fh[0] != $stat_file[0]) {
+	    # file was unlinked in the meantime and another plockf process was faster
+	    return undef;
+	}
+    }
+    return $lock_fh;
+}
+
+sub wait_for_lock_other {
+    if (sysopen my $fh, $lock_file, &Fcntl::O_RDONLY) {
+	flock $fh, &Fcntl::LOCK_EX;
+    }
+}
+
+sub wait_for_lock_nonblocking {
+    while () {
+	last if $timed_out;
+	if (sysopen my $fh, $lock_file, &Fcntl::O_RDONLY) {
+	    return if flock $fh, &Fcntl::LOCK_EX|&Fcntl::LOCK_NB;
+	}
+	sleep 1;
+    }
 }
 
 sub handle_error ($) {
@@ -180,28 +217,6 @@ sub handle_error ($) {
 	}
     }
     exit $exit;
-}
-
-# Simplified version of Time::Out::timeout:
-# - no nested timeouts possible
-# - no return/context handling
-# - no special exception handling necessary
-sub timeout ($$) {
-    my($secs, $code) = @_;
-    my $alarm;
-    if (eval { Time::HiRes->import('alarm') }) {
-	$alarm = \&Time::HiRes::alarm;
-    } else {
-	if ($secs < 1) { $secs = 1 }
-	$alarm = sub { alarm(@_) };
-    }
-    local $SIG{ALRM} = sub { die $code };
-    eval {
-	$alarm->($secs);
-	$code->();
-	$alarm->(0);
-    };
-    $alarm->(0);
 }
 
 sub progname () {
@@ -230,6 +245,14 @@ I<arguments>. After the I<command> completes, B<plockf> releases the
 lock, and removes the I<file> unless the C<-k> option is specified.
 BSD-style locking is used, as described in L<flock(2)>; the mere
 existence of the I<file> is not considered to constitute a lock.
+
+If the B<plockf> utility is being used to facilitate concurrency
+between a number of processes, it is recommended that the C<-k> option
+be used. This will guarantee lock ordering, as well as implement a
+performance enhanced algorithm which minimizes CPU load associated
+with concurrent unlink, drop and re-acquire activity. It should be
+noted that if the C<-k> option is not used, then no guarantees around
+lock ordering can be made.
 
 The following options are supported:
 
