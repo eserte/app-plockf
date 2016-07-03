@@ -105,6 +105,8 @@ if (!$lock_fh) {
     handle_error EX_TEMPFAIL;
 }
 
+my $do_cleanup = !$keep;
+
 $SIG{TERM} = sub { exit }; # would run END block
 
 system { $cmd } $cmd, @ARGV;
@@ -119,7 +121,7 @@ if ($? == -1) {
 }
 
 END {
-    if (!$keep && defined $lock_file) {
+    if ($do_cleanup) {
 	unlink $lock_file;
     }
 }
