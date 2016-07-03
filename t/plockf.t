@@ -38,7 +38,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my @cmd = (@full_script, '-h');
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 64, 'bad usage'; # hmmm, should it really fail if the user specifies --help?
-    defined $stderr and like $stderr, qr{usage};
+    defined $stderr and like $stderr, qr{^usage: plockf };
 }
 
 {
@@ -46,7 +46,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 64, 'bad usage';
     defined $stderr and like $stderr, qr{Lock file is not specified};
-    defined $stderr and like $stderr, qr{usage};
+    defined $stderr and like $stderr, qr{^usage: plockf }m;
 }
 
 {
@@ -100,7 +100,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my @cmd = (@full_script, '-t', 0, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 75, 'lock error on -t 0';
-    defined $stderr and like $stderr, qr{plockf: .*plockf.lck: already locked$};
+    defined $stderr and like $stderr, qr{^plockf: .*plockf.lck: already locked$};
     kill 9 => $pid;
     waitpid $pid, 0;
 }
@@ -120,7 +120,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my @cmd = (@full_script, '-t', 0.2, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 75, 'lock error on -t > 0s';
-    defined $stderr and like $stderr, qr{plockf: .*plockf.lck: already locked$};
+    defined $stderr and like $stderr, qr{^plockf: .*plockf.lck: already locked$};
     kill 9 => $pid;
     waitpid $pid, 0;
 }
@@ -146,7 +146,7 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
     my @cmd = (@full_script, '-n', $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
     is $ret, 69, 'error on -n option';
-    defined $stderr and like $stderr, qr{plockf: cannot open .*plockf.lck:};
+    defined $stderr and like $stderr, qr{^plockf: cannot open .*plockf.lck:};
 }
 
 sub run_blocking_process {

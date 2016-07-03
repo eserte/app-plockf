@@ -33,13 +33,14 @@ sub lock_bsd ($);
 sub lock_other ($);
 sub handle_error ($);
 sub timeout ($$);
+sub progname ();
 
 sub usage (;$) {
     my $msg = shift;
     if ($msg) {
 	warn $msg, "\n";
     }
-    warn "usage: $0 [-kns] [-t seconds] file command [arguments]\n";
+    warn "usage: " . progname . " [-kns] [-t seconds] file command [arguments]\n";
     exit EX_USAGE;
 }
 
@@ -106,7 +107,7 @@ if (defined $timeout && $timeout > 0) {
 # XXX signal handling?
 system { $cmd } $cmd, @ARGV;
 if ($? == -1) {
-    warn "$0: calling '$cmd @ARGV' failed: $!\n";
+    warn progname . ": calling '$cmd @ARGV' failed: $!\n";
     exit EX_OSERR;
 } elsif ($? & 127) {
     exit EX_SOFTWARE;
@@ -173,9 +174,9 @@ sub handle_error ($) {
     my $exit = shift;
     unless ($silent) {
 	if ($exit == EX_UNAVAILABLE) {
-	    warn "$0: cannot open $lock_file: $!\n";
+	    warn progname . ": cannot open $lock_file: $!\n";
 	} else {
-	    warn "$0: $lock_file: already locked\n";
+	    warn progname . ": $lock_file: already locked\n";
 	}
     }
     exit $exit;
@@ -201,6 +202,11 @@ sub timeout ($$) {
 	$alarm->(0);
     };
     $alarm->(0);
+}
+
+sub progname () {
+    require File::Basename;
+    File::Basename::basename($0);
 }
 
 __END__
