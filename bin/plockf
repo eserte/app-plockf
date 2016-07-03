@@ -144,7 +144,7 @@ sub set_impl () {
 sub acquire_lock_bsd {
     my($block) = @_;
     my $lock_fh;
-    if (!sysopen $lock_fh, $lock_file, ($block ? 0 : &Fcntl::O_NONBLOCK)|&Fcntl::O_EXLOCK|($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
+    if (!sysopen $lock_fh, $lock_file, &Fcntl::O_RDONLY|($block ? 0 : &Fcntl::O_NONBLOCK)|&Fcntl::O_EXLOCK|($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
 	if ($!{EAGAIN} || $!{EINTR}) {
 	    return undef;
 	}
@@ -165,7 +165,7 @@ sub wait_for_lock_bsd {
 sub acquire_lock_other {
     my($block) = @_;
     my $lock_fh;
-    if (!sysopen $lock_fh, $lock_file, ($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
+    if (!sysopen $lock_fh, $lock_file, &Fcntl::O_RDONLY|($nocreat ? 0 : &Fcntl::O_CREAT), 0666) {
 	if ($!{EAGAIN} || $!{EINTR}) {
 	    return undef;
 	}
