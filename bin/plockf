@@ -18,7 +18,7 @@ use Fcntl ();
 use Getopt::Long;
 
 use vars qw($VERSION);
-$VERSION = "0.02";
+$VERSION = "0.03";
 
 # sysexits(3) constants
 use constant EX_USAGE       => 64;

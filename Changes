@@ -1,5 +1,8 @@
 Revision history for plockf.
 
+0.03	2016-07-03
+	- fix alarm handling
+
 0.02	2016-07-03
 	- implementation overhaul
 
