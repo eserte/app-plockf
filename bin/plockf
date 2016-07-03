@@ -74,7 +74,7 @@ my $timed_out;
 my $alarm;
 if (defined $timeout && $timeout > 0) {
     $SIG{ALRM} = sub { $timed_out = 1 };
-    if ($timeout !~ m{^\d+$} && eval { require Time::HiRes; Time::HiRes->import('ualarm'); 1 }) { # do we need and can we do floating point timeouts?
+    if ($timeout !~ m{^\d+$} && eval { require Time::HiRes; Time::HiRes->VERSION(1.9716); Time::HiRes->import('ualarm'); 1 }) { # do we need and can we do floating point timeouts?
 	$alarm = \&Time::HiRes::alarm;
     } else {
 	if ($timeout < 1) { $timeout = 1 }

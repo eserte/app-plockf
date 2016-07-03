@@ -18,6 +18,7 @@ WriteMakefile(
     NAME              => 'App::plockf',
     VERSION_FROM      => 'bin/plockf',
     PREREQ_PM         => {
+      'Time::HiRes' => 1.9716, # https://rt.cpan.org/Ticket/Display.html?id=35899
     },
     EXE_FILES         => ['bin/plockf'],
     LICENSE	      => 'perl',
