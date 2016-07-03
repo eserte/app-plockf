@@ -145,6 +145,15 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 }
 
 {
+    my $pid = run_blocking_process(1, '-k');
+    my @cmd = (@full_script, '-k', '-t', 100, $lock_file, $^X, '-e1');
+    my($ret, undef, $stderr) = run(\@cmd);
+    is $ret, 0, 'got lock within timeout interval';
+    defined $stderr and is $stderr, '';
+    ok -f $lock_file, 'lock file was kept';
+}
+
+{
     my $pid = run_blocking_process(1);
     my @cmd = (@full_script, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
@@ -163,12 +172,12 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 }
 
 sub run_blocking_process {
-    my $seconds = shift;
+    my($seconds, @opts) = @_;
     unlink $signal_file;
     my $pid = fork;
     die $! if !defined $pid;
     if ($pid == 0) {
-	my @cmd = (@full_script, $lock_file, $^X, '-e', qq{open my \$fh, q{>}, shift; sleep $seconds}, $signal_file);
+	my @cmd = (@full_script, @opts, $lock_file, $^X, '-e', qq{open my \$fh, q{>}, shift; sleep $seconds}, $signal_file);
 	exec @cmd;
 	die "@cmd failed: $!";
     }
