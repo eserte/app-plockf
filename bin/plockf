@@ -292,6 +292,26 @@ supported.
 In no event will B<plockf> break a lock that is held by another
 process.
 
+=head2 IMPLEMENTATION DETAILS
+
+On systems where L<open(2)> handles C<O_EXLOCK> and C<O_NONBLOCK>
+(most notably on *BSD systems) the implementation follows quite
+closely the original C implementation of L<lockf(1)>.
+
+On other systems (e.g. Linux) there's a possible race condition
+between creation and locking of the lock I<file>. Here an extra check
+is done if the lock filehandle is really done on the lock I<file>, and
+the lock procedure is re-done if not. Here it's especially recommended
+to use the C<-k> option.
+
+On Windows systems this extra check is incomplete, so it's even more
+recommended to use C<-k>.
+
+On Windows systems C<alarm()> cannot interrupt blocking system calls,
+i.e. C<flock()> (see L<perlport/alarm>). Here the timeout handling is
+implemented by periodically checking if the lock can be acquired
+(currently the interval is one second).
+
 =head1 EXIT STATUS
 
 If B<plockf> successfully acquires the lock, it returns the exit status
@@ -333,7 +353,7 @@ C<EX_SOFTWARE> is not reported on Windows system.s
 
 =head1 SEE ALSO
 
-L<flock(1)>, L<flock(2)>, L<sysexits(3)>, L<Fcntl>.
+L<flock(1)>, L<flock(2)>, L<open(2)>, L<sysexits(3)>, L<Fcntl>.
 
 =head1 AUTHORS
 
