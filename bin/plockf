@@ -172,6 +172,10 @@ sub acquire_lock_other {
 	if ($nocreat && $!{ENOENT}) {
 	    handle_error EX_UNAVAILABLE;
 	} else {
+	    if ($nocreat) {
+		warn $!+0;
+		warn "$!";
+	    }
 	    handle_error EX_CANTCREAT;
 	}
     }
