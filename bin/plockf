@@ -178,16 +178,18 @@ sub acquire_lock_other {
     if (!flock $lock_fh, ($block ? 0 : &Fcntl::LOCK_NB)|&Fcntl::LOCK_EX) {
 	return undef;
     }
-    my @stat_file = stat $lock_file;
-    if (!@stat_file) {
-	# file was unlinked in the meantime
-	return undef;
-    }
-    if ($^O ne 'MSWin32') { # ino+dev are not meaningful on Windows systems
-	my @stat_fh = stat $lock_fh;
-	if ($stat_fh[1] != $stat_file[1] || $stat_fh[0] != $stat_file[0]) {
-	    # file was unlinked in the meantime and another plockf process was faster
+    if (!$keep) {
+	my @stat_file = stat $lock_file;
+	if (!@stat_file) {
+	    # file was unlinked in the meantime
 	    return undef;
+	}
+	if ($^O ne 'MSWin32') { # ino+dev are not meaningful on Windows systems
+	    my @stat_fh = stat $lock_fh;
+	    if ($stat_fh[1] != $stat_file[1] || $stat_fh[0] != $stat_file[0]) {
+		# file was unlinked in the meantime and another plockf process was faster
+		return undef;
+	    }
 	}
     }
     return $lock_fh;
