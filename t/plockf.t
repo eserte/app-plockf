@@ -97,10 +97,12 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 }
 
 {
+    my $t0 = time;
     my $pid = run_blocking_process(3);
     my @cmd = (@full_script, '-t', 0, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
-    is $ret, 75, 'lock error on -t 0';
+    is $ret, 75, 'lock error on -t 0'
+	or diag "Time since run_blocking_process: " . (time-$t0);
     defined $stderr and like $stderr, qr{^plockf: .*plockf.lck: already locked$};
     if ($^O ne 'MSWin32') { # SIGTERM is problematic on Windows: http://stackoverflow.com/a/33216565/2332415
 	kill TERM => $pid;
@@ -110,10 +112,12 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 }
 
 {
+    my $t0 = time;
     my $pid = run_blocking_process(3);
     my @cmd = (@full_script, '-s', '-t', 0, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
-    is $ret, 75, 'silent lock error on -t 0';
+    is $ret, 75, 'silent lock error on -t 0'
+	or diag "Time since run_blocking_process: " . (time-$t0);
     defined $stderr and is $stderr, '';
     if ($^O ne 'MSWin32') {
 	kill TERM => $pid;
@@ -123,10 +127,12 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 }
 
 {
+    my $t0 = time;
     my $pid = run_blocking_process(4);
     my @cmd = (@full_script, '-t', 0.2, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
-    is $ret, 75, 'lock error on -t > 0s';
+    is $ret, 75, 'lock error on -t > 0s'
+	or diag "Time since run_blocking_process: " . (time-$t0);
     defined $stderr and like $stderr, qr{^plockf: .*plockf.lck: already locked$};
     if ($^O ne 'MSWin32') {
 	kill TERM => $pid;
@@ -136,28 +142,34 @@ my $signal_file = "$FindBin::RealBin/plockf.signal";
 }
 
 {
+    my $t0 = time;
     my $pid = run_blocking_process(1);
     my @cmd = (@full_script, '-t', 100, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
-    is $ret, 0, 'got lock within timeout interval';
+    is $ret, 0, 'got lock within timeout interval'
+	or diag "Time since run_blocking_process: " . (time-$t0);
     defined $stderr and is $stderr, '';
     ok !-f $lock_file, 'cleanup of lock file works';
 }
 
 {
+    my $t0 = time;
     my $pid = run_blocking_process(1, '-k');
     my @cmd = (@full_script, '-k', '-t', 100, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
-    is $ret, 0, 'got lock within timeout interval';
+    is $ret, 0, 'got lock within timeout interval'
+	or diag "Time since run_blocking_process: " . (time-$t0);
     defined $stderr and is $stderr, '';
     ok -f $lock_file, 'lock file was kept';
 }
 
 {
+    my $t0 = time;
     my $pid = run_blocking_process(1);
     my @cmd = (@full_script, $lock_file, $^X, '-e1');
     my($ret, undef, $stderr) = run(\@cmd);
-    is $ret, 0, 'no lock error, blocking lock';
+    is $ret, 0, 'no lock error, blocking lock'
+	or diag "Time since run_blocking_process: " . (time-$t0);
     defined $stderr and is $stderr, '';
     ok !-f $lock_file, 'cleanup of lock file works';
 }
@@ -185,6 +197,7 @@ sub run_blocking_process {
     while() {
 	last if -f $signal_file;
 	die "Something went wrong; signal file never created" if time - $t0 > 60;
+	die "Something went wrong; blocker process exited without creating signal file" if !kill 0 => $pid;
 	select undef, undef, undef, 0.05;
     }
     $pid;
