@@ -1,25 +1,35 @@
 language: perl
+arch:
+ - arm64
 matrix:
  include:
-  - perl: "5.22"
-    env: WITH_IPC_RUN=1
-  - perl: "5.20"
-  - perl: "5.18"
-    env: WITH_IPC_RUN=1
-  - perl: "5.16"
-  - perl: "5.14"
-  - perl: "5.12"
-  - perl: "5.10"
-  - perl: "5.8"
-    env: WITH_IPC_RUN=1
-  - perl: "5.8"
-    env: WITH_IPC_RUN=1 USE_TIME_HIRES_VERSION=1.9716
-
-before_install:
- - '[ "$WITH_IPC_RUN" = 1 ]             && cpanm --quiet --notest IPC::Run                                || true'
- - '[ "$USE_TIME_HIRES_VERSION" != "" ] && cpanm --quiet --notest Time::HiRes~"==$USE_TIME_HIRES_VERSION" || true'
+  - dist: xenial
+    perl: 5.24
+    env: USE_SUDO= USE_TIME_HIRES_VERSION=1.9716
+  - dist: bionic
+    perl: 5.26
+    env: USE_SUDO=
+  - dist: focal
+    perl: 5.32
+    env: USE_SUDO= WITH_IPC_RUN=1
+  - dist: focal
+    env: USE_SYSTEM_PERL=1 USE_SUDO=sudo
+    language: minimal
 
 branches:
  except:
   - /appveyor/
-sudo: false
+  - /github-actions/
+  - /doozer/
+
+before_install:
+ - if [ "$USE_SYSTEM_PERL" = "1" ]; then sudo apt-get update -qq; sudo apt-get install -qq cpanminus; fi
+ - '[ "$WITH_IPC_RUN" = 1 ]             && $USE_SUDO cpanm --quiet --notest IPC::Run                                || true'
+ - '[ "$USE_TIME_HIRES_VERSION" != "" ] && $USE_SUDO cpanm --quiet --notest Time::HiRes~"==$USE_TIME_HIRES_VERSION" || true'
+
+install:
+ - $USE_SUDO cpanm --quiet --installdeps --notest .
+ - '[ "$USE_SUDO" = "" ] || rm -f MYMETA.*'
+
+script:
+ - perl Makefile.PL && env HARNESS_TIMER=1 HARNESS_OPTIONS=j4:c make disttest
