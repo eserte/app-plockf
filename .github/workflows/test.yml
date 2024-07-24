@@ -2,9 +2,118 @@ name: CI
 
 on:
   push:
+    branches-ignore:
+      - '*travis*'
+      - '*appveyor*'
+      - '*doozer*'
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Test on ${{ matrix.config_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - config_name: ubuntu-20.04
+            os: ubuntu-20.04
+          - config_name: ubuntu-22.04
+            os: ubuntu-22.04
+          - config_name: ubuntu-22.04 with optional dependencies
+            os: ubuntu-22.04
+            install_optional_dependencies: true
+          - config_name: macos-12
+            os: macos-12
+          - config_name: macos-13
+            os: macos-13
+          - config_name: macos-14
+            os: macos-14
+          - config_name: windows-latest
+            os: windows-latest
+            install_optional_dependencies: true
+
     steps:
-      - run: echo "This workflow does nothing"
+    - uses: actions/checkout@v4
+      with:
+        clean: false
+        show-progress: false
+    - run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y libipc-run-perl
+      if: ${{ matrix.install_optional_dependencies && startsWith(matrix.os, 'ubuntu-') }}
+    - run: |
+        cpanm --quiet --notest IPC::Run
+      if: ${{ matrix.install_optional_dependencies && startsWith(matrix.os, 'windows-') }}
+
+    - name: Build and test
+      run: |
+        perl Makefile.PL
+        make -j4 all test
+
+  test_in_container:
+    name: Test with ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: perl:5.8.9-threaded-stretch
+          - image: perl:5.10.1-buster
+          - image: perl:5.12.5-stretch
+          - image: perl:5.14.4-stretch
+          - image: perl:5.16.3-buster
+          - image: perl:5.18.4-buster
+          - image: perl:5.22.4-stretch
+          - image: perl:5.36.0-slim-bullseye
+          - image: perl:5.38.0-slim-bookworm
+          - image: perl:5.40.0-slim-bookworm
+          ## use debian:* images only if there's no suitable perl:* image
+          #- image: debian:bookworm
+          - image: ubuntu:noble
+          - image: rockylinux:9
+          - image: fedora:40
+
+    steps:
+    # Note: checkout@v4 does not work with older debians (e.g.stretch), so do this step *outside* the container
+    - uses: actions/checkout@v4
+    - name: Preinstall, Configure, Build and Test
+      run: |
+        docker run --quiet -v $(pwd):$(pwd) ${{ matrix.image }} sh -c "cd $(pwd); "'
+          set -ex
+          export HARNESS_TIMER=1
+          export HARNESS_OPTIONS=j8
+          which cpanm 2>/dev/null || if which apt-get 2>/dev/null >/dev/null
+            then
+              apt-get update -qq && apt-get install -qy --no-install-recommends cpanminus make
+            else
+              yum -y install perl-App-cpanminus "perl(Test::More)"
+            fi
+          cpanm --quiet --installdeps --notest . || ( cat /root/.cpanm/work/*/build.log; false )
+          perl Makefile.PL
+          make -j4 all test
+        '
+
+  test_freebsd:
+    name: Test on FreeBSD ${{ matrix.osvers }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - osvers: '13.3'
+          - osvers: '14.1'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        clean: false
+        show-progress: false
+    - uses: cross-platform-actions/action@v0.25.0
+      with:
+        operating_system: freebsd
+        version: '${{ matrix.osvers }}'
+        run: |
+          sudo pkg update
+          sudo pkg install -y perl5
+          perl Makefile.PL
+          make -j4 all test
+          sudo pkg install -y p5-IPC-Run
+          make -j4 test
