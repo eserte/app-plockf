@@ -16,13 +16,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - config_name: ubuntu-20.04
-            os: ubuntu-20.04
           - config_name: ubuntu-22.04
             os: ubuntu-22.04
           - config_name: ubuntu-22.04 with optional dependencies
             os: ubuntu-22.04
             install_optional_dependencies: true
+          - config_name: ubuntu-24.04
+            os: ubuntu-24.04
           - config_name: macos-12
             os: macos-12
           - config_name: macos-13
@@ -69,7 +69,7 @@ jobs:
           - image: perl:5.40.0-slim-bookworm
           ## use debian:* images only if there's no suitable perl:* image
           #- image: debian:bookworm
-          - image: ubuntu:noble
+          - image: ubuntu:focal
           - image: rockylinux:9
           - image: fedora:40
 
@@ -84,7 +84,7 @@ jobs:
           export HARNESS_OPTIONS=j8
           which cpanm 2>/dev/null || if which apt-get 2>/dev/null >/dev/null
             then
-              apt-get update -qq && apt-get install -qy --no-install-recommends cpanminus make
+              DEBIAN_FRONTEND=noninteractive apt-get update -qq && apt-get install -qy --no-install-recommends cpanminus make
             else
               yum -y install perl-App-cpanminus "perl(Test::More)"
             fi
