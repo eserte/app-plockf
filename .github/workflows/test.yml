@@ -32,7 +32,7 @@ jobs:
             install_optional_dependencies: true
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         clean: false
         show-progress: false
@@ -73,7 +73,7 @@ jobs:
 
     steps:
     # Note: checkout@v4 does not work with older debians (e.g.stretch), so do this step *outside* the container
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Preinstall, Configure, Build and Test
       run: |
         docker run --quiet -v $(pwd):$(pwd) ${{ matrix.image }} sh -c "cd $(pwd); "'
@@ -100,7 +100,7 @@ jobs:
           - osvers: '13.5'
           - osvers: '14.3'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         clean: false
         show-progress: false
