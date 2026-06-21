@@ -100,6 +100,10 @@ jobs:
           - osvers: '13.5'
           - osvers: '14.4'
           - osvers: '15.0'
+    defaults:
+      run:
+        # cpa.sh is cross-platform-actions/action "magic"
+        shell: 'cpa.sh {0}'
     steps:
     - uses: actions/checkout@v6
       with:
@@ -109,10 +113,11 @@ jobs:
       with:
         operating_system: freebsd
         version: '${{ matrix.osvers }}'
-        run: |
-          sudo pkg update
-          sudo pkg install -y perl5
-          perl Makefile.PL
-          make -j4 all test
-          sudo pkg install -y p5-IPC-Run
-          make -j4 test
+    - name: Build and test
+      run: |
+        sudo pkg update
+        sudo pkg install -y perl5
+        perl Makefile.PL
+        make -j4 all test
+        sudo pkg install -y p5-IPC-Run
+        make -j4 test
