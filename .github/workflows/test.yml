@@ -97,7 +97,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - osvers: '13.5'
           - osvers: '14.5'
           - osvers: '15.1'
     defaults:
@@ -109,7 +108,7 @@ jobs:
       with:
         clean: false
         show-progress: false
-    - uses: cross-platform-actions/action@v1.6.0
+    - uses: cross-platform-actions/action@v1.7.0
       with:
         operating_system: freebsd
         version: '${{ matrix.osvers }}'
